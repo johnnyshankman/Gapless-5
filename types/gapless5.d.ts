@@ -71,6 +71,7 @@ export class Gapless5 {
     useWebAudio: boolean;
     useHTML5Audio: boolean;
     playbackRate: any;
+    sinkId: string;
     id: any;
     context: any;
     keyMappings: {};
@@ -241,6 +242,12 @@ export class Gapless5 {
      */
     setPlaybackRate: (rate: number) => void;
     /**
+     * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
+     *   pass '' to use the system default output
+     * @returns {Promise} resolves once routing has been applied (errors are logged, not thrown)
+     */
+    setSinkId: (sinkId: string) => Promise<any>;
+    /**
      * @param {number} duration - in milliseconds
      */
     setCrossfade: (duration: number) => void;
@@ -308,6 +315,7 @@ declare class Gapless5FileList {
     stopAllTracks: (resetPositions: any, excludedTracks?: any[]) => void;
     removeAllTracks: (flushList: any) => void;
     setPlaybackRate: (rate: any) => void;
+    applySinkId: (sinkId: any) => Promise<any[]>;
     setShuffle: (nextShuffle: any, preserveCurrent?: boolean) => void;
     isShuffled: () => any;
     numTracks: () => number;
@@ -341,6 +349,7 @@ declare class Gapless5Source {
     getLength: () => number;
     play: (syncPosition: any, webAudioSwitched?: boolean) => void;
     setPlaybackRate: (rate: any) => void;
+    applySinkId: (sinkId: any) => any;
     tick: (updateLoopState: any) => number;
     getSeekablePercent: () => number;
     setPosition: (newPosition: any, bResetPlay: any) => void;

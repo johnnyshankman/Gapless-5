@@ -185,6 +185,11 @@ These can be passed into a `Gapless5` constructor, or (with the exception of `tr
 - **playbackRate**
   - default = 1.0
   - multiplier for the playback speed, higher = plays faster, lower = plays slower
+- **sinkId**
+  - default = `''` (system default output)
+  - audio output device ID — obtain from `navigator.mediaDevices.enumerateDevices()` (filter by `kind === 'audiooutput'`)
+  - lets you route playback to a specific device (e.g. built-in speakers) regardless of the OS default
+  - `AudioContext.setSinkId` is Chromium-only; in Safari and Firefox the WebAudio path will fall back to the system default and a warning will be logged. `HTMLMediaElement.setSinkId` is more broadly supported (Chromium, Firefox 116+, Safari 17+), so the HTML5 Audio path works in those browsers.
 - **mapKeys**
   - pressing specified key (case-insensitive) will trigger any Action function listed above.
 - **logLevel**
@@ -241,6 +246,10 @@ You can call these functions on `Gapless5` objects.
   - sets the crossfade curve shape
 - **setPlaybackRate(playbackRate)**
   - updates the playback speed in real time (see `playbackRate` option)
+- **setSinkId(sinkId)**
+  - routes audio output to the given device (see `sinkId` option)
+  - pass `''` to revert to the system default
+  - returns a `Promise` that resolves once routing has been applied; failures are logged via the library logger rather than thrown, so it is safe to `await` without a surrounding `try/catch`
 - **mapKeys(jsonMapping)**
   - pressing specified key (case-insensitive) will trigger any Action function listed below.
   - `jsonMapping` maps an action to a key, see example code below

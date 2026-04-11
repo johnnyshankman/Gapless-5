@@ -11,6 +11,7 @@ const audioMockClass = () => ({
   load: jest.fn(),
   pause: jest.fn(),
   play: jest.fn(() => Promise.resolve(jest.fn())),
+  setSinkId: jest.fn(() => Promise.resolve()),
 });
 Audio = jest.fn().mockImplementation(audioMockClass);
 
@@ -19,6 +20,8 @@ const audioContextMockClass = () => ({
     gain: { value: 1 },
     connect: jest.fn(),
   }),
+  setSinkId: jest.fn(() => Promise.resolve()),
+  destination: {},
 });
 
 window = {
@@ -352,3 +355,85 @@ describe('Gapless-5 object with load limit', () => {
     expect(loadedTracks.size).toBe(0);
   });
 });
+
+// Options that enable the HTML5 Audio path so Audio mock is exercised.
+// WebAudio path stays off so XHR/decode plumbing isn't required.
+const SINK_OPTIONS = {
+  logLevel: LogLevel.None,
+  useWebAudio: false,
+  useHTML5Audio: true,
+};
+
+describe('Gapless-5 setSinkId', () => {
+  beforeEach(() => {
+    Audio.mockClear();
+    if (window.gapless5AudioContext && window.gapless5AudioContext.setSinkId) {
+      window.gapless5AudioContext.setSinkId.mockClear();
+    }
+  });
+
+  it('defaults sinkId to empty string', () => {
+    const player = new Gapless5(SINK_OPTIONS);
+    expect(player.sinkId).toBe('');
+  });
+
+  it('accepts sinkId via constructor option', () => {
+    const player = new Gapless5({ ...SINK_OPTIONS, sinkId: 'device-abc' });
+    expect(player.sinkId).toBe('device-abc');
+  });
+
+  it('setSinkId updates player.sinkId and resolves', async () => {
+    const player = new Gapless5(SINK_OPTIONS);
+    await expect(player.setSinkId('device-xyz')).resolves.toBeUndefined();
+    expect(player.sinkId).toBe('device-xyz');
+  });
+
+  it('setSinkId propagates to HTML5 Audio elements of loaded tracks', async () => {
+    const player = new Gapless5(SINK_OPTIONS);
+    player.addTrack(TRACKS[0]);
+    await player.setSinkId('device-xyz');
+    const instance = Audio.mock.results[Audio.mock.results.length - 1].value;
+    expect(instance.setSinkId).toHaveBeenCalledWith('device-xyz');
+  });
+
+  it('new Audio elements created after setSinkId pick up current sinkId', async () => {
+    const player = new Gapless5(SINK_OPTIONS);
+    await player.setSinkId('device-xyz');
+    Audio.mockClear();
+    player.addTrack(TRACKS[0]);
+    const instance = Audio.mock.results[Audio.mock.results.length - 1].value;
+    expect(instance.setSinkId).toHaveBeenCalledWith('device-xyz');
+  });
+
+  it('constructor sinkId applies to tracks added later', () => {
+    const player = new Gapless5({ ...SINK_OPTIONS, sinkId: 'device-init' });
+    Audio.mockClear();
+    player.addTrack(TRACKS[0]);
+    const instance = Audio.mock.results[Audio.mock.results.length - 1].value;
+    expect(instance.setSinkId).toHaveBeenCalledWith('device-init');
+  });
+
+  it('warns and resolves when Audio.setSinkId is missing', async () => {
+    Audio.mockImplementationOnce(() => ({
+      addEventListener: jest.fn(),
+      load: jest.fn(),
+      pause: jest.fn(),
+      play: jest.fn(() => Promise.resolve(jest.fn())),
+    }));
+    const player = new Gapless5(SINK_OPTIONS);
+    player.addTrack(TRACKS[0]);
+    await expect(player.setSinkId('device-xyz')).resolves.toBeUndefined();
+    expect(player.sinkId).toBe('device-xyz');
+  });
+
+  it('setSinkId calls AudioContext.setSinkId when WebAudio is enabled', async () => {
+    const player = new Gapless5({
+      logLevel: LogLevel.None,
+      useWebAudio: true,
+      useHTML5Audio: false,
+    });
+    await player.setSinkId('device-xyz');
+    expect(window.gapless5AudioContext.setSinkId).toHaveBeenCalledWith('device-xyz');
+  });
+});
+

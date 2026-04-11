@@ -382,6 +382,15 @@ function Gapless5Source(parentPlayer, parentLog, inAudioPath) {
     setEndedCallbackTime((endpos - position) / 1000);
   };
 
+  this.applySinkId = (sinkId) => {
+    if (audio && typeof audio.setSinkId === 'function') {
+      return audio.setSinkId(sinkId).catch((e) => {
+        log.warn(`setSinkId failed for ${this.audioPath}: ${(e && e.message) || e}`);
+      });
+    }
+    return Promise.resolve();
+  };
+
   this.tick = (updateLoopState) => {
     if (state === Gapless5State.Play) {
       const nextTick = new Date().getTime();
@@ -515,6 +524,11 @@ function Gapless5Source(parentPlayer, parentLog, inAudioPath) {
         audioObj.addEventListener('loadedmetadata', onLoadedHTML5Metadata, false);
         audioObj.addEventListener('canplaythrough', onLoadedHTML5Audio, false);
         audioObj.addEventListener('error', onError, false);
+        if (player.sinkId && typeof audioObj.setSinkId === 'function') {
+          audioObj.setSinkId(player.sinkId).catch((e) => {
+            log.warn(`setSinkId failed for ${audioPath}: ${(e && e.message) || e}`);
+          });
+        }
         // TODO: switch to audio.networkState, now that it's universally supported
         return audioObj;
       };
@@ -709,6 +723,14 @@ function Gapless5FileList(parentPlayer, parentLog, inShuffle, inLoadLimit = -1, 
     for (let i = 0; i < this.sources.length; i++) {
       this.sources[i].setPlaybackRate(rate);
     }
+  };
+
+  this.applySinkId = (sinkId) => {
+    const promises = [];
+    for (let i = 0; i < this.sources.length; i++) {
+      promises.push(this.sources[i].applySinkId(sinkId));
+    }
+    return Promise.all(promises);
   };
 
   // Toggle shuffle mode or not, and prepare for rebasing the playlist
@@ -973,6 +995,7 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   this.useWebAudio = options.useWebAudio !== false;
   this.useHTML5Audio = options.useHTML5Audio !== false;
   this.playbackRate = options.playbackRate || 1.0;
+  this.sinkId = typeof options.sinkId === 'string' ? options.sinkId : '';
   this.id = options.guiId || Math.floor((1 + Math.random()) * 0x10000);
   window.gapless5Players[this.id] = this;
 
@@ -1474,6 +1497,29 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   };
 
   /**
+   * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
+   *   pass '' to use the system default output
+   * @returns {Promise} resolves once routing has been applied (errors are logged, not thrown)
+   */
+  this.setSinkId = (sinkId) => {
+    this.sinkId = sinkId || '';
+    const tasks = [];
+    if (this.context && typeof this.context.setSinkId === 'function') {
+      tasks.push(
+        this.context.setSinkId(this.sinkId).catch((e) => {
+          log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
+        })
+      );
+    } else if (this.useWebAudio && this.sinkId) {
+      log.warn('AudioContext.setSinkId not supported in this browser; WebAudio will use default output');
+    }
+    if (this.playlist) {
+      tasks.push(this.playlist.applySinkId(this.sinkId));
+    }
+    return Promise.all(tasks).then(() => undefined);
+  };
+
+  /**
    * @param {number} duration - in milliseconds
    */
   this.setCrossfade = (duration) => {
@@ -1899,6 +1945,10 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
     this.playlist = new Gapless5FileList(this, log, options.shuffle, options.loadLimit, items, startingTrack);
   } else {
     this.playlist = new Gapless5FileList(this, log, options.shuffle, options.loadLimit);
+  }
+
+  if (this.sinkId) {
+    this.setSinkId(this.sinkId);
   }
 
   this.initialized = true;

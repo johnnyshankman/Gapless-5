@@ -386,6 +386,7 @@ function Gapless5Source(parentPlayer, parentLog, inAudioPath) {
     if (audio && typeof audio.setSinkId === 'function') {
       return audio.setSinkId(sinkId).catch((e) => {
         log.warn(`setSinkId failed for ${this.audioPath}: ${(e && e.message) || e}`);
+        throw e;
       });
     }
     return Promise.resolve();
@@ -730,7 +731,7 @@ function Gapless5FileList(parentPlayer, parentLog, inShuffle, inLoadLimit = -1, 
     for (let i = 0; i < this.sources.length; i++) {
       promises.push(this.sources[i].applySinkId(sinkId));
     }
-    return Promise.all(promises);
+    return promises;
   };
 
   // Toggle shuffle mode or not, and prepare for rebasing the playlist
@@ -1499,24 +1500,52 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   /**
    * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
    *   pass '' to use the system default output
-   * @returns {Promise} resolves once routing has been applied (errors are logged, not thrown)
+   * @returns {Promise} resolves once routing has been applied on every path. If any underlying path
+   *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
+   *   with an Error whose `.errors` property contains the individual failures; each failure is also
+   *   logged via the library logger.
    */
   this.setSinkId = (sinkId) => {
     this.sinkId = sinkId || '';
     const tasks = [];
-    if (this.context && typeof this.context.setSinkId === 'function') {
-      tasks.push(
-        this.context.setSinkId(this.sinkId).catch((e) => {
-          log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
-        })
-      );
-    } else if (this.useWebAudio && this.sinkId) {
+    let contextHandled = false;
+    if (this.context) {
+      if (typeof this.context.setSinkId === 'function') {
+        contextHandled = true;
+        tasks.push(
+          Promise.resolve(this.context.setSinkId(this.sinkId)).catch((e) => {
+            log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
+            throw e;
+          })
+        );
+      } else if ('sinkId' in this.context) {
+        // Speculative fallback for browsers exposing sinkId as a writable property
+        // (readonly in current spec; try/catch swallows the TypeError if assignment fails).
+        try {
+          this.context.sinkId = this.sinkId;
+          contextHandled = true;
+        } catch (e) {
+          // fall through to warning
+        }
+      }
+    }
+    if (!contextHandled && this.useWebAudio && this.sinkId) {
       log.warn('AudioContext.setSinkId not supported in this browser; WebAudio will use default output');
     }
     if (this.playlist) {
-      tasks.push(this.playlist.applySinkId(this.sinkId));
+      const playlistTasks = this.playlist.applySinkId(this.sinkId);
+      for (let i = 0; i < playlistTasks.length; i++) {
+        tasks.push(playlistTasks[i]);
+      }
     }
-    return Promise.all(tasks).then(() => undefined);
+    return Promise.allSettled(tasks).then((results) => {
+      const errors = results.filter((r) => r.status === 'rejected').map((r) => r.reason);
+      if (errors.length) {
+        const err = new Error(`setSinkId failed (${errors.length} error(s))`);
+        err.errors = errors;
+        throw err;
+      }
+    });
   };
 
   /**

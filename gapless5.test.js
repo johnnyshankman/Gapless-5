@@ -435,5 +435,85 @@ describe('Gapless-5 setSinkId', () => {
     await player.setSinkId('device-xyz');
     expect(window.gapless5AudioContext.setSinkId).toHaveBeenCalledWith('device-xyz');
   });
+
+  it('setSinkId rejects when HTMLMediaElement.setSinkId rejects', async () => {
+    const notFound = new Error('NotFoundError');
+    // Persistent override: mockImplementationOnce would be consumed by the
+    // stubAudio created inside the Gapless5 constructor, missing the track Audio.
+    const originalImpl = Audio.getMockImplementation();
+    Audio.mockImplementation(() => ({
+      addEventListener: jest.fn(),
+      load: jest.fn(),
+      pause: jest.fn(),
+      play: jest.fn(() => Promise.resolve(jest.fn())),
+      setSinkId: jest.fn(() => Promise.reject(notFound)),
+    }));
+    try {
+      const player = new Gapless5(SINK_OPTIONS);
+      player.addTrack(TRACKS[0]);
+      let caught;
+      try {
+        await player.setSinkId('bad-device');
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught.message).toMatch(/setSinkId failed/);
+      expect(caught.errors).toEqual([ notFound ]);
+      // state still reflects the requested sinkId even on failure
+      expect(player.sinkId).toBe('bad-device');
+    } finally {
+      Audio.mockImplementation(originalImpl);
+    }
+  });
+
+  it('setSinkId rejects when AudioContext.setSinkId rejects', async () => {
+    const notFound = new Error('NotFoundError');
+    const originalImpl = window.gapless5AudioContext.setSinkId.getMockImplementation();
+    window.gapless5AudioContext.setSinkId.mockImplementation(() => Promise.reject(notFound));
+    try {
+      const player = new Gapless5({
+        logLevel: LogLevel.None,
+        useWebAudio: true,
+        useHTML5Audio: false,
+      });
+      let caught;
+      try {
+        await player.setSinkId('bad-device');
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught.message).toMatch(/setSinkId failed/);
+      expect(caught.errors).toEqual([ notFound ]);
+    } finally {
+      window.gapless5AudioContext.setSinkId.mockImplementation(originalImpl);
+    }
+  });
+
+  // Documents the known shared-AudioContext limitation: every Gapless5 on a
+  // page reuses `window.gapless5AudioContext`, so setSinkId on one player
+  // silently reroutes the WebAudio output of every other player. If a future
+  // change gives each player its own AudioContext, update this test.
+  it('multiple players share AudioContext — setSinkId on one affects the shared context', async () => {
+    const p1 = new Gapless5({
+      logLevel: LogLevel.None,
+      useWebAudio: true,
+      useHTML5Audio: false,
+    });
+    const p2 = new Gapless5({
+      logLevel: LogLevel.None,
+      useWebAudio: true,
+      useHTML5Audio: false,
+    });
+    expect(p1.context).toBe(p2.context);
+    await p2.setSinkId('device-2');
+    expect(window.gapless5AudioContext.setSinkId).toHaveBeenLastCalledWith('device-2');
+    // p1's declared sinkId state is untouched, but the shared context it
+    // points at now routes to device-2 — this is the leak the comment warns
+    // about. Fixing it requires a per-player AudioContext.
+    expect(p1.sinkId).toBe('');
+    expect(p2.sinkId).toBe('device-2');
+  });
 });
 

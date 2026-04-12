@@ -244,7 +244,10 @@ export class Gapless5 {
     /**
      * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
      *   pass '' to use the system default output
-     * @returns {Promise} resolves once routing has been applied (errors are logged, not thrown)
+     * @returns {Promise} resolves once routing has been applied on every path. If any underlying path
+     *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
+     *   with an Error whose `.errors` property contains the individual failures; each failure is also
+     *   logged via the library logger.
      */
     setSinkId: (sinkId: string) => Promise<any>;
     /**
@@ -315,7 +318,7 @@ declare class Gapless5FileList {
     stopAllTracks: (resetPositions: any, excludedTracks?: any[]) => void;
     removeAllTracks: (flushList: any) => void;
     setPlaybackRate: (rate: any) => void;
-    applySinkId: (sinkId: any) => Promise<any[]>;
+    applySinkId: (sinkId: any) => any[];
     setShuffle: (nextShuffle: any, preserveCurrent?: boolean) => void;
     isShuffled: () => any;
     numTracks: () => number;

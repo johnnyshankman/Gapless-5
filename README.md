@@ -250,6 +250,7 @@ You can call these functions on `Gapless5` objects.
   - routes audio output to the given device (see `sinkId` option)
   - pass `''` to revert to the system default
   - returns a `Promise` that resolves once routing has been applied on every underlying path (`AudioContext.setSinkId` and any loaded `HTMLMediaElement.setSinkId`). If any path rejects, the promise rejects with an `Error` whose `.errors` array contains the individual failures; each failure is also logged via the library logger. All paths are attempted regardless of which ones fail.
+  - note: all `Gapless5` instances on a page share a single `AudioContext` (`window.gapless5AudioContext`), so calling `setSinkId` on one player reroutes the WebAudio output of every player on the page. The `HTMLMediaElement` path remains per-track.
 - **mapKeys(jsonMapping)**
   - pressing specified key (case-insensitive) will trigger any Action function listed below.
   - `jsonMapping` maps an action to a key, see example code below

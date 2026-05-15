@@ -244,12 +244,12 @@ export class Gapless5 {
     /**
      * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
      *   pass '' to use the system default output
-     * @returns {Promise} resolves once routing has been applied on every path. If any underlying path
+     * @returns {Promise<void>} resolves once routing has been applied on every path. If any underlying path
      *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
      *   with an Error whose `.errors` property contains the individual failures; each failure is also
      *   logged via the library logger.
      */
-    setSinkId: (sinkId: string) => Promise<any>;
+    setSinkId: (sinkId: string) => Promise<void>;
     /**
      * @param {number} duration - in milliseconds
      */

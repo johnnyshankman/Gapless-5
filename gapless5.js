@@ -1500,47 +1500,35 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   /**
    * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
    *   pass '' to use the system default output
-   * @returns {Promise} resolves once routing has been applied on every path. If any underlying path
+   * @returns {Promise<void>} resolves once routing has been applied on every path. If any underlying path
    *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
    *   with an Error whose `.errors` property contains the individual failures; each failure is also
    *   logged via the library logger.
    */
   this.setSinkId = (sinkId) => {
-    this.sinkId = sinkId || '';
+    this.sinkId = typeof sinkId === 'string' ? sinkId : '';
     const tasks = [];
     let contextHandled = false;
-    if (this.context) {
-      if (typeof this.context.setSinkId === 'function') {
-        contextHandled = true;
-        tasks.push(
-          Promise.resolve(this.context.setSinkId(this.sinkId)).catch((e) => {
-            log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
-            throw e;
-          })
-        );
-      } else if ('sinkId' in this.context) {
-        // Speculative fallback for browsers exposing sinkId as a writable property
-        // (readonly in current spec; try/catch swallows the TypeError if assignment fails).
-        try {
-          this.context.sinkId = this.sinkId;
-          contextHandled = true;
-        } catch (e) {
-          // fall through to warning
-        }
-      }
+    if (this.context && typeof this.context.setSinkId === 'function') {
+      contextHandled = true;
+      tasks.push(
+        Promise.resolve(this.context.setSinkId(this.sinkId)).catch((e) => {
+          log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
+          throw e;
+        })
+      );
     }
     if (!contextHandled && this.useWebAudio && this.sinkId) {
       log.warn('AudioContext.setSinkId not supported in this browser; WebAudio will use default output');
     }
     if (this.playlist) {
       const playlistTasks = this.playlist.applySinkId(this.sinkId);
-      for (let i = 0; i < playlistTasks.length; i++) {
-        tasks.push(playlistTasks[i]);
-      }
+      playlistTasks.forEach((p) => { tasks.push(p); });
     }
     return Promise.allSettled(tasks).then((results) => {
       const errors = results.filter((r) => r.status === 'rejected').map((r) => r.reason);
       if (errors.length) {
+        // DIY aggregate (AggregateError is ES2021; parser target is ES2018)
         const err = new Error(`setSinkId failed (${errors.length} error(s))`);
         err.errors = errors;
         throw err;
@@ -1977,7 +1965,11 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   }
 
   if (this.sinkId) {
-    this.setSinkId(this.sinkId);
+    // Track-side Audio elements pick up sinkId via getHtml5Audio at create time;
+    // this call exists to route the (shared) AudioContext on construction. Errors
+    // are already logged inside setSinkId — swallow the rejection to keep the
+    // constructor's contract synchronous.
+    this.setSinkId(this.sinkId).catch(() => {});
   }
 
   this.initialized = true;

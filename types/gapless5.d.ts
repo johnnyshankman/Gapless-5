@@ -74,6 +74,7 @@ export class Gapless5 {
     sinkId: string;
     id: any;
     context: any;
+    canSetSinkId: boolean;
     keyMappings: {};
     /**
      * @param {string} from_track - track that we're switching from
@@ -244,10 +245,11 @@ export class Gapless5 {
     /**
      * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
      *   pass '' to use the system default output
-     * @returns {Promise<void>} resolves once routing has been applied on every path. If any underlying path
-     *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
-     *   with an Error whose `.errors` property contains the individual failures; each failure is also
-     *   logged via the library logger.
+     * @returns {Promise<void>} On browsers that support output routing (see `canSetSinkId`), resolves once
+     *   routing has been applied on every path (AudioContext.setSinkId and any loaded HTMLMediaElement.setSinkId);
+     *   if any path rejects, the returned promise rejects with an Error whose `.errors` property contains the
+     *   individual failures (each is also logged). On browsers that do not support output routing (Firefox,
+     *   Safari, mobile), this logs a warning and resolves without changing the output device.
      */
     setSinkId: (sinkId: string) => Promise<void>;
     /**

@@ -525,7 +525,7 @@ function Gapless5Source(parentPlayer, parentLog, inAudioPath) {
         audioObj.addEventListener('loadedmetadata', onLoadedHTML5Metadata, false);
         audioObj.addEventListener('canplaythrough', onLoadedHTML5Audio, false);
         audioObj.addEventListener('error', onError, false);
-        if (player.sinkId && typeof audioObj.setSinkId === 'function') {
+        if (player.canSetSinkId && player.sinkId && typeof audioObj.setSinkId === 'function') {
           audioObj.setSinkId(player.sinkId).catch((e) => {
             log.warn(`setSinkId failed for ${audioPath}: ${(e && e.message) || e}`);
           });
@@ -1008,6 +1008,15 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
     }
   }
   this.context = window.gapless5AudioContext;
+
+  // Capability probe for audio output device routing (setSinkId). We gate the
+  // whole feature on AudioContext.setSinkId, which today is only implemented in
+  // Chromium-based desktop browsers (Chrome/Edge). It is absent in Firefox,
+  // Safari (desktop and iOS), and Chrome on Android. Feature-detecting it here
+  // lets setSinkId route reliably where it works and log a clear warning (rather
+  // than silently half-working) everywhere else. Consumers can read this
+  // property to decide whether to surface an output-device picker at all.
+  this.canSetSinkId = Boolean(this.context && typeof this.context.setSinkId === 'function');
 
   // Callback and Execution logic
   this.keyMappings = {};
@@ -1500,26 +1509,34 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
   /**
    * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
    *   pass '' to use the system default output
-   * @returns {Promise<void>} resolves once routing has been applied on every path. If any underlying path
-   *   (AudioContext.setSinkId or HTMLMediaElement.setSinkId) rejects, the returned promise rejects
-   *   with an Error whose `.errors` property contains the individual failures; each failure is also
-   *   logged via the library logger.
+   * @returns {Promise<void>} On browsers that support output routing (see `canSetSinkId`), resolves once
+   *   routing has been applied on every path (AudioContext.setSinkId and any loaded HTMLMediaElement.setSinkId);
+   *   if any path rejects, the returned promise rejects with an Error whose `.errors` property contains the
+   *   individual failures (each is also logged). On browsers that do not support output routing (Firefox,
+   *   Safari, mobile), this logs a warning and resolves without changing the output device.
    */
   this.setSinkId = (sinkId) => {
     this.sinkId = typeof sinkId === 'string' ? sinkId : '';
+    if (!this.canSetSinkId) {
+      if (this.sinkId) {
+        log.warn(
+          `setSinkId: audio output device selection requires AudioContext.setSinkId, which is currently ` +
+          `only available in Chromium-based desktop browsers (Chrome/Edge). Ignoring sinkId "${this.sinkId}" ` +
+          `in this browser. Check player.canSetSinkId before offering an output-device picker.`
+        );
+      }
+      return Promise.resolve();
+    }
     const tasks = [];
-    let contextHandled = false;
-    if (this.context && typeof this.context.setSinkId === 'function') {
-      contextHandled = true;
+    // Reroute the shared AudioContext only when this player actually uses WebAudio,
+    // so an HTML5-only player doesn't pull the shared context away from other players.
+    if (this.useWebAudio) {
       tasks.push(
         Promise.resolve(this.context.setSinkId(this.sinkId)).catch((e) => {
           log.warn(`AudioContext.setSinkId failed: ${(e && e.message) || e}`);
           throw e;
         })
       );
-    }
-    if (!contextHandled && this.useWebAudio && this.sinkId) {
-      log.warn('AudioContext.setSinkId not supported in this browser; WebAudio will use default output');
     }
     if (this.playlist) {
       const playlistTasks = this.playlist.applySinkId(this.sinkId);
@@ -1966,9 +1983,10 @@ function Gapless5(options = {}, deprecated = {}) { // eslint-disable-line no-unu
 
   if (this.sinkId) {
     // Track-side Audio elements pick up sinkId via getHtml5Audio at create time;
-    // this call exists to route the (shared) AudioContext on construction. Errors
-    // are already logged inside setSinkId — swallow the rejection to keep the
-    // constructor's contract synchronous.
+    // this call exists to route the (shared) AudioContext on construction (and to
+    // warn on browsers that don't support output routing). Errors are already
+    // logged inside setSinkId — swallow the rejection to keep the constructor's
+    // contract synchronous.
     this.setSinkId(this.sinkId).catch(() => {});
   }
 

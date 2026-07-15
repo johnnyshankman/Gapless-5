@@ -515,5 +515,69 @@ describe('Gapless-5 setSinkId', () => {
     expect(p1.sinkId).toBe('');
     expect(p2.sinkId).toBe('device-2');
   });
+
+  it('canSetSinkId is true when AudioContext.setSinkId is available', () => {
+    const player = new Gapless5(SINK_OPTIONS);
+    expect(player.canSetSinkId).toBe(true);
+  });
+
+  it('setSinkId leaves the shared AudioContext alone when useWebAudio is false', async () => {
+    // HTML5-only player: routing goes to the Audio elements, never the shared
+    // context (which other WebAudio players may depend on).
+    const player = new Gapless5(SINK_OPTIONS);
+    player.addTrack(TRACKS[0]);
+    await player.setSinkId('device-xyz');
+    expect(window.gapless5AudioContext.setSinkId).not.toHaveBeenCalled();
+    const instance = Audio.mock.results[Audio.mock.results.length - 1].value;
+    expect(instance.setSinkId).toHaveBeenCalledWith('device-xyz');
+  });
+
+  it('setSinkId warns and no-ops when AudioContext.setSinkId is unavailable (Firefox/Safari/mobile)', async () => {
+    // Simulate a non-Chromium browser by removing setSinkId from the shared context.
+    const ctx = window.gapless5AudioContext;
+    const savedSetSinkId = ctx.setSinkId;
+    delete ctx.setSinkId;
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const player = new Gapless5({
+        logLevel: LogLevel.Warning,
+        useWebAudio: false,
+        useHTML5Audio: true,
+      });
+      expect(player.canSetSinkId).toBe(false);
+      player.addTrack(TRACKS[0]);
+      const instance = Audio.mock.results[Audio.mock.results.length - 1].value;
+
+      await expect(player.setSinkId('device-xyz')).resolves.toBeUndefined();
+
+      // Warned clearly, and did not attempt to route anything.
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/only available in Chromium/));
+      expect(instance.setSinkId).not.toHaveBeenCalled();
+      // player.sinkId still records the requested value for consumer introspection.
+      expect(player.sinkId).toBe('device-xyz');
+    } finally {
+      warnSpy.mockRestore();
+      ctx.setSinkId = savedSetSinkId;
+    }
+  });
+
+  it('empty sinkId on an unsupported browser resolves silently without warning', async () => {
+    const ctx = window.gapless5AudioContext;
+    const savedSetSinkId = ctx.setSinkId;
+    delete ctx.setSinkId;
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const player = new Gapless5({
+        logLevel: LogLevel.Warning,
+        useWebAudio: false,
+        useHTML5Audio: true,
+      });
+      await expect(player.setSinkId('')).resolves.toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      ctx.setSinkId = savedSetSinkId;
+    }
+  });
 });
 

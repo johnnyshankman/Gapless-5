@@ -2,7 +2,7 @@
 
 A gapless JavaScript audio player using HTML5 and WebAudio.
 
-> **About this fork:** this is a maintained fork of [regosen/Gapless-5](https://github.com/regosen/Gapless-5) that powers [hihat](https://github.com/johnnyshankman/hihat). It adds audio output device selection (the `sinkId` option and `setSinkId()` method). Releases are tagged `v<upstream-version>-hihat.<n>` and changes from upstream are merged in as they land.
+> **About this fork:** this is a maintained fork of [regosen/Gapless-5](https://github.com/regosen/Gapless-5) that powers [hihat](https://github.com/johnnyshankman/hihat). It adds audio output device selection (the `sinkId` option and `setSinkId()` method). That feature relies on `AudioContext.setSinkId`, which only Chromium-based browsers (including Electron) support, so it lives here rather than upstream, which is meant to work the same in every browser. Releases are tagged `v<upstream-version>-hihat.<n>` and changes from upstream are merged in as they land.
 
 <!-- vscode-markdown-toc -->
 * 1. [Demos](#1-demos)

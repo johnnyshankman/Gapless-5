@@ -185,6 +185,11 @@ These can be passed into a `Gapless5` constructor, or (with the exception of `tr
 - **playbackRate**
   - default = 1.0
   - multiplier for the playback speed, higher = plays faster, lower = plays slower
+- **sinkId**
+  - default = `''` (system default output)
+  - audio output device ID — obtain from `navigator.mediaDevices.enumerateDevices()` (filter by `kind === 'audiooutput'`)
+  - lets you route playback to a specific device (e.g. built-in speakers) regardless of the OS default
+  - **Browser support:** output-device routing is gated on `AudioContext.setSinkId`, which today is only implemented in Chromium-based desktop browsers (Chrome/Edge). On Firefox, Safari (desktop and iOS), and Chrome on Android it is unavailable, so setting `sinkId` there logs a console warning and plays on the system default. Check the read-only `player.canSetSinkId` boolean before offering an output-device picker.
 - **mapKeys**
   - pressing specified key (case-insensitive) will trigger any Action function listed above.
 - **logLevel**
@@ -241,6 +246,12 @@ You can call these functions on `Gapless5` objects.
   - sets the crossfade curve shape
 - **setPlaybackRate(playbackRate)**
   - updates the playback speed in real time (see `playbackRate` option)
+- **setSinkId(sinkId)**
+  - routes audio output to the given device (see `sinkId` option)
+  - pass `''` to revert to the system default
+  - only supported in Chromium-based desktop browsers (Chrome/Edge). On unsupported browsers (Firefox, Safari, mobile) it logs a console warning and resolves without changing the output — gate any UI on `player.canSetSinkId`.
+  - on supported browsers, returns a `Promise` that resolves once routing has been applied on every underlying path (`AudioContext.setSinkId` and any loaded `HTMLMediaElement.setSinkId`). If any path rejects, the promise rejects with an `Error` whose `.errors` array contains the individual failures; each failure is also logged via the library logger. All paths are attempted regardless of which ones fail.
+  - note: all `Gapless5` instances on a page share a single `AudioContext` (`window.gapless5AudioContext`), so calling `setSinkId` on a player that uses WebAudio reroutes the WebAudio output of every player on the page. The `HTMLMediaElement` path remains per-track.
 - **mapKeys(jsonMapping)**
   - pressing specified key (case-insensitive) will trigger any Action function listed below.
   - `jsonMapping` maps an action to a key, see example code below

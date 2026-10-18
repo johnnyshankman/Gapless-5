@@ -71,8 +71,10 @@ export class Gapless5 {
     useWebAudio: boolean;
     useHTML5Audio: boolean;
     playbackRate: any;
+    sinkId: string;
     id: any;
     context: any;
+    canSetSinkId: boolean;
     keyMappings: {};
     /**
      * @param {string} from_track - track that we're switching from
@@ -241,6 +243,16 @@ export class Gapless5 {
      */
     setPlaybackRate: (rate: number) => void;
     /**
+     * @param {string} sinkId - audio output device ID from navigator.mediaDevices.enumerateDevices();
+     *   pass '' to use the system default output
+     * @returns {Promise<void>} On browsers that support output routing (see `canSetSinkId`), resolves once
+     *   routing has been applied on every path (AudioContext.setSinkId and any loaded HTMLMediaElement.setSinkId);
+     *   if any path rejects, the returned promise rejects with an Error whose `.errors` property contains the
+     *   individual failures (each is also logged). On browsers that do not support output routing (Firefox,
+     *   Safari, mobile), this logs a warning and resolves without changing the output device.
+     */
+    setSinkId: (sinkId: string) => Promise<void>;
+    /**
      * @param {number} duration - in milliseconds
      */
     setCrossfade: (duration: number) => void;
@@ -308,6 +320,7 @@ declare class Gapless5FileList {
     stopAllTracks: (resetPositions: any, excludedTracks?: any[]) => void;
     removeAllTracks: (flushList: any) => void;
     setPlaybackRate: (rate: any) => void;
+    applySinkId: (sinkId: any) => any[];
     setShuffle: (nextShuffle: any, preserveCurrent?: boolean) => void;
     isShuffled: () => any;
     numTracks: () => number;
@@ -341,6 +354,7 @@ declare class Gapless5Source {
     getLength: () => number;
     play: (syncPosition: any, webAudioSwitched?: boolean) => void;
     setPlaybackRate: (rate: any) => void;
+    applySinkId: (sinkId: any) => any;
     tick: (updateLoopState: any) => number;
     getSeekablePercent: () => number;
     setPosition: (newPosition: any, bResetPlay: any) => void;
